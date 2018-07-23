@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import json
 import nltk
@@ -16,8 +15,7 @@ from stop_words import get_stop_words
 LOGPATH = ''
 LOGNAME = 'log_dataset'
 MANNAME = 'manual'
-PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
-           '201806', '201807']
+PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804']
 
 
 class Activity:
@@ -137,22 +135,20 @@ def word_embedding(known_commands: [dict]):
     with open(LOGNAME + '.txt') as man_file:
         manpages = pickle.load(man_file)
     stop_words = set(string.punctuation).union(set(get_stop_words('en')))
+    stemmer = nltk.stem.SnowballStemmer('english')
     for command, manual in manpages.items():
-        manual.split()
-
-
+        manpages[command] = ' '.join([stemmer.stem(word) for word in manual.split() if word not in stop_words])
 
     print(stop_words)
-    stemmer = nltk.stem.SnowballStemmer('english')
+
 
 
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    # parse_commands()
-    # word_embedding(parse_commands_from_local())
-    word_embedding()
+    load_dataset(True)
+    read_shell_commands(False)
 
 if __name__ == '__main__':
     main()
