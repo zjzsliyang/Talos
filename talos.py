@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import json
 import nltk
@@ -122,20 +121,25 @@ def shell_commands_embedding(manpages: {'str': 'str'}):
         commands.append(command)
         for word in nltk.tokenize.word_tokenize(manual.lower()):
             if word not in stop_words and word not in string.punctuation:
-                #TODO: can remove the word which only appears once
+                # TODO: can remove the word which only appears once
                 manpages[command].append(stemmer.stem(word))
     dictionary = corpora.Dictionary(manpages.values())
     corpus = [dictionary.doc2bow(text) for text in manpages.values()]
     tfidf = models.TfidfModel(corpus)
-    corpus_tfidf = tfidf[corpus]
-    lsi = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=100)
+    lsi = models.LsiModel(tfidf[corpus], id2word=dictionary, num_topics=100)
     index = similarities.MatrixSimilarity(lsi[corpus])
-    res = lsi[dictionary.doc2bow(manpages['ls'])]
-    sort_sims = sorted(enumerate(index[res]), key=lambda item: -item[1])
-    print(sort_sims[:10])
-    print('following commands are similar to the command \'ls\':')
-    for sim in sort_sims[:10]:
-        print(commands[sim[0]])
+
+    def find_similar_commands(command: str):
+        threshold = 0.8
+        if command in commands:
+            res = lsi[corpus[commands.index(command)]]
+            sort_sims = sorted(enumerate(index[res]), key=lambda item: -item[1])
+            print('following commands are similar to \'' + '\033[1m' + '{}'.format(command) + '\033[0m' + '\':')
+            for sim in sort_sims:
+                if sim[1] > threshold:
+                    print('\t\033[1m' + '{}'.format(commands[sim[0]]) + '\033[0m' + ' ({})'.format(sim[1]))
+
+    find_similar_commands('chmod')
 
 
 # # TODO: to be redo
