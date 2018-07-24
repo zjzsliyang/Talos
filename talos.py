@@ -1,21 +1,23 @@
 import os
+import re
 import sys
 import json
 import nltk
 import string
 import pickle
-import sklearn
 import logging
 import threading
 import subprocess
-from gensim import models
+from sklearn import svm
 from stop_words import get_stop_words
-
+from gensim import models, similarities, corpora
 
 LOGPATH = ''
 LOGNAME = 'log_dataset'
 MANNAME = 'manual'
-PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804']
+LSIMODEL = 'lsi.model'
+PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
+           '201806', '201807']
 
 
 class Activity:
@@ -29,8 +31,9 @@ class Activity:
 class Session:
     def __init__(self, session: dict):
         self.activities = []
-        for activity in session['activities']:
-            self.activities.append(Activity(activity))
+        if 'activities' in session:
+            for activity in session['activities']:
+                self.activities.append(Activity(activity))
         self.starttime = session['starttime']
         self.endtime = session['endtime']
         self.hostname = session['hostname']
@@ -89,8 +92,7 @@ def load_dataset(multithread: bool = False) -> [str]:
     return commands
 
 
-
-def read_shell_commands(dumped: bool = True) -> {'str': 'str'}:
+def load_shell_commands(dumped: bool = True) -> {'str': 'str'}:
     if dumped:
         with open(MANNAME + '.pickle', 'rb') as man_file:
             manpages = pickle.load(man_file)
@@ -111,44 +113,57 @@ def read_shell_commands(dumped: bool = True) -> {'str': 'str'}:
     return manpages
 
 
-# TODO: to be redo
-def parse_commands_from_local():
-    shell_commands = read_shell_commands()
-    raw_commands = []
-    for shell_command in shell_commands:
-        raw_commands.append(shell_command.raw)
-
-    with open(LOGNAME + '.txt') as f:
-        data = f.readlines()
-    dataset_commands = []
-    for line in data:
-        dataset_commands.append(line.split()[1])
-    known_commands = []
-    for dataset_command in dataset_commands:
-        if dataset_command in raw_commands:
-            known_commands.append(dataset_command)
-    logging.info('remaining {} commands known'.format(len(known_commands)))
-    return known_commands
-
-
-def word_embedding(known_commands: [dict]):
-    with open(LOGNAME + '.txt') as man_file:
-        manpages = pickle.load(man_file)
-    stop_words = set(string.punctuation).union(set(get_stop_words('en')))
+def shell_commands_embedding(manpages: {'str': 'str'}):
+    stop_words = get_stop_words('en')
     stemmer = nltk.stem.SnowballStemmer('english')
+    commands = []
     for command, manual in manpages.items():
-        manpages[command] = ' '.join([stemmer.stem(word) for word in manual.split() if word not in stop_words])
+        manpages[command] = []
+        commands.append(command)
+        for word in nltk.tokenize.word_tokenize(manual.lower()):
+            if word not in stop_words and word not in string.punctuation:
+                #TODO: can remove the word which only appears once
+                manpages[command].append(stemmer.stem(word))
+    dictionary = corpora.Dictionary(manpages.values())
+    corpus = [dictionary.doc2bow(text) for text in manpages.values()]
+    tfidf = models.TfidfModel(corpus)
+    corpus_tfidf = tfidf[corpus]
+    lsi = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=100)
+    index = similarities.MatrixSimilarity(lsi[corpus])
+    res = lsi[dictionary.doc2bow(manpages['ls'])]
+    sort_sims = sorted(enumerate(index[res]), key=lambda item: -item[1])
+    print(sort_sims[:10])
+    print('following commands are similar to the command \'ls\':')
+    for sim in sort_sims[:10]:
+        print(commands[sim[0]])
 
-    print(stop_words)
 
-
-
+# # TODO: to be redo
+# def parse_commands_from_local():
+#     shell_commands = load_shell_commands()
+#     raw_commands = []
+#     for shell_command in shell_commands:
+#         raw_commands.append(shell_command.raw)
+#
+#     with open(LOGNAME + '.txt') as f:
+#         data = f.readlines()
+#     dataset_commands = []
+#     for line in data:
+#         dataset_commands.append(line.split()[1])
+#     known_commands = []
+#     for dataset_command in dataset_commands:
+#         if dataset_command in raw_commands:
+#             known_commands.append(dataset_command)
+#     logging.info('remaining {} commands known'.format(len(known_commands)))
+#     return known_commands
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    load_dataset(True)
-    read_shell_commands(False)
+    # load_dataset(True)
+    # read_shell_commands(False)
+    shell_commands_embedding(load_shell_commands(dumped=True))
+
 
 if __name__ == '__main__':
     main()
