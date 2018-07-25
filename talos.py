@@ -102,9 +102,16 @@ def load_shell_commands(dumped: bool = True) -> {'str': 'str'}:
         manpages = {}
         commands = s.stdout.read().decode('utf-8').split()
         for command in commands:
-            man = subprocess.run(['man', command], stdout=subprocess.PIPE).stdout.decode('utf-8')
-            if man:
-                manpages[command] = man
+            if sys.version_info[1] > 4:
+                man = subprocess.run(['man', command], stdout=subprocess.PIPE).stdout.decode('utf-8')
+                if man:
+                    manpages[command] = man
+            else:
+                try:
+                    man = subprocess.check_output(['man', command]).decode('utf-8')
+                    manpages[command] = man
+                except subprocess.CalledProcessError:
+                    pass
         man_file = open(MANNAME + '.pickle', 'wb')
         pickle.dump(manpages, man_file)
         man_file.close()
