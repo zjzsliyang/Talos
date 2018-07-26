@@ -13,11 +13,11 @@ from stop_words import get_stop_words
 from gensim import models, similarities, corpora
 
 
-LOGPATH = ''
-LOGNAME = 'log_dataset'
 MANNAME = 'manual'
 LSIMODEL = 'lsi.model'
 ALIASPATH = 'alias.txt'
+LOGNAME = 'log_dataset'
+LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807']
 
@@ -83,7 +83,7 @@ def load_shell_commands(dumped: bool = True) -> {'str': 'str'}:
     return manpages
 
 
-def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] = []):
+def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] = []) -> {'str': [float]}:
     stop_words = get_stop_words('en')
     stemmer = nltk.stem.SnowballStemmer('english')
     commands = []
@@ -100,11 +100,14 @@ def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] =
     lsi = models.LsiModel(tfidf[corpus], id2word=dictionary, num_topics=100)
     index = similarities.MatrixSimilarity(lsi[corpus])
 
+    lsimodel = {}
+    for command in manpages.keys():
+        lsimodel[command] = lsi[corpus[commands.index(command)]]
+
     def find_similar_commands(command: str):
         threshold = 0.8
         if command in commands:
-            res = lsi[corpus[commands.index(command)]]
-            sort_sims = sorted(enumerate(index[res]), key=lambda item: -item[1])
+            sort_sims = sorted(enumerate(index[lsimodel[command]]), key=lambda item: -item[1])
             print('following commands are similar to \'' + '\033[1m' + '{}'.format(command) + '\033[0m' + '\':')
             for sim in sort_sims:
                 if sim[1] > threshold:
@@ -112,6 +115,8 @@ def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] =
 
     for similar_command in similar_commands:
         find_similar_commands(similar_command)
+
+    return lsimodel
 
 
 def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Session]:
@@ -176,7 +181,7 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     return sessions
 
 
-def outlier_detect(sessions: [Session], windows: int = 10):
+def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, windows: int = 10):
     pass
 
 
@@ -184,8 +189,8 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     manpages = load_shell_commands(dumped=True)
-    shell_commands_embedding(manpages, similar_commands=['ls', 'rm'])
-    outlier_detect(load_dataset(manpages, multithread=False))
+    lsimodel = shell_commands_embedding(manpages, similar_commands=['ls', 'rm'])
+    outlier_detect(load_dataset(manpages, multithread=False), lsimodel)
 
 
 if __name__ == '__main__':
