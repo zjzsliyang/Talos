@@ -114,7 +114,7 @@ def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] =
         find_similar_commands(similar_command)
 
 
-def load_dataset(manpages: {'str': 'str'}, multithread: bool = False, windows: int = 10):
+def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Session]:
     def load_alias() -> {'str': 'str'}:
         aliases = {}
         try:
@@ -173,13 +173,19 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False, windows: i
     logging.info(
         'already known {0} with {1} unique commands.'.format(sum(known_commands.values()), len(known_commands.keys())))
 
+    return sessions
+
+
+def outlier_detect(sessions: [Session], windows: int = 10):
+    pass
+
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
     manpages = load_shell_commands(dumped=True)
     shell_commands_embedding(manpages, similar_commands=['ls', 'rm'])
-    load_dataset(manpages, multithread=False)
+    outlier_detect(load_dataset(manpages, multithread=False))
 
 
 if __name__ == '__main__':
