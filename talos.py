@@ -12,13 +12,14 @@ from collections import defaultdict
 from stop_words import get_stop_words
 from gensim import models, similarities, corpora
 
+
 LOGPATH = ''
 LOGNAME = 'log_dataset'
 MANNAME = 'manual'
 LSIMODEL = 'lsi.model'
+ALIASPATH = 'alias.txt'
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807']
-
 
 
 class Activity:
@@ -114,6 +115,16 @@ def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] =
 
 
 def load_dataset(manpages: {'str': 'str'}, multithread: bool = False, windows: int = 10):
+    def load_alias() -> {'str': 'str'}:
+        aliases = {}
+        try:
+            with open(ALIASPATH, 'r') as alias_file:
+                for line in alias_file:
+                    aliases[line.split('=', 1)[0].strip('\'')] = line.split('=', 1)[1].strip('\'').strip('\n')
+        except FileNotFoundError:
+            print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
+        return aliases
+
     def read_dataset(period: str):
         logging.info('reading dataset from json in following period: {}'.format(period))
         sessions = []
@@ -138,6 +149,7 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False, windows: i
         for thread in pool:
             thread.join()
 
+    aliases = load_alias()
     commands = defaultdict(int)
     for period in PERIODS:
         logging.info('load dataset from pickle in following period: {}'.format(period))
@@ -146,16 +158,20 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False, windows: i
         for session in sessions:
             for activity in session.activities:
                 if activity.command is not None:
-                    if len(activity.command.strip().split()):
-                        commands[activity.command.strip().split()[0]] += 1
+                    activity.command = activity.command.strip()
+                    if len(activity.command.split()):
+                        for alias in aliases.keys():
+                            if activity.command.startswith(alias + ' '):
+                                activity.command = activity.command.replace(alias, aliases[alias], 1)
+                        commands[activity.command.split()[0]] += 1
 
-    logging.info('current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
+    logging.info(
+        'current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
     known_commands = {}
     for command in set(commands.keys()) & set(manpages.keys()):
         known_commands[command] = commands[command]
-    logging.info('already known {0} with {1} unique commands.'.format(sum(known_commands.values()), len(known_commands.keys())))
-
-    
+    logging.info(
+        'already known {0} with {1} unique commands.'.format(sum(known_commands.values()), len(known_commands.keys())))
 
 
 def main():
