@@ -169,6 +169,10 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
                             if activity.command.startswith(alias + ' '):
                                 activity.command = activity.command.replace(alias, aliases[alias], 1)
                         commands[activity.command.split()[0]] += 1
+                    else:
+                        session.activities.remove(activity)
+                else:
+                    session.activities.remove(activity)
 
     logging.info(
         'current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
@@ -181,8 +185,19 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     return sessions
 
 
-def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, windows: int = 10):
-    pass
+def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, window: int = 10, training: float = 0.5, folds: int = 1):
+    dataset = defaultdict(list)
+    for session in sessions:
+        if session.userid is not None:
+            for activity in session.activities:
+                if activity.command.split()[0] in lsimodel.keys():
+                    dataset[session.userid].append(activity.command.split()[0])
+
+    for userid, commands in dataset.items():
+        dataset[userid] = list(zip(*[iter(commands)] * window))
+
+    
+    svm.OneClassSVM()
 
 
 def main():
