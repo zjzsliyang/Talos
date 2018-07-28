@@ -33,10 +33,10 @@ class Activity:
 
 class Session:
     def __init__(self, session: dict):
-        self.activities = []
+        self.activities = {}
         if 'activities' in session:
             for activity in session['activities']:
-                self.activities.append(Activity(activity))
+                self.activities[activity['sequence_number']] = Activity(activity)
         self.starttime = session['starttime']
         self.endtime = session['endtime']
         self.hostname = session['hostname']
@@ -49,6 +49,31 @@ class Session:
         self.userid = session['userid']
         self.uuid = session['uuid']
 
+    def merge(self, session: dict):
+        another = Session(session)
+        self.activities.update(another.activities)
+        if self.starttime is None:
+            self.starttime = another.starttime
+        if self.endtime is None:
+            self.endtime = another.endtime
+        if self.hostname is None:
+            self.hostname = another.hostname
+        if self.rule is None:
+            self.rule = another.rule
+        if self.runas is None:
+            self.runas = another.runas
+        if self.subject is None:
+            self.subject = another.subject
+        for tag in another.tags:
+            self.tags.append(tag)
+        if self.ticketas is None:
+            self.ticketas = another.ticketas
+        if self.tooltype is None:
+            self.tooltype = another.tooltype
+        if self.userid is None:
+            self.userid = another.userid
+        return self
+
 
 class Shell_Command:
     def __init__(self, data: dict):
@@ -56,7 +81,7 @@ class Shell_Command:
         self.description = data['d']
 
 
-def load_shell_commands(dumped: bool = True) -> {'str': 'str'}:
+def load_shell_commands(dumped: bool = True) -> {str: str}:
     if dumped:
         with open(MANNAME + '.pickle', 'rb') as man_file:
             manpages = pickle.load(man_file)
@@ -84,7 +109,7 @@ def load_shell_commands(dumped: bool = True) -> {'str': 'str'}:
     return manpages
 
 
-def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] = []) -> {'str': [float]}:
+def shell_commands_embedding(manpages: {str: str}, similar_commands: [str] = []) -> {str: [float]}:
     stop_words = get_stop_words('en')
     stemmer = nltk.stem.SnowballStemmer('english')
     commands = []
@@ -120,8 +145,8 @@ def shell_commands_embedding(manpages: {'str': 'str'}, similar_commands: [str] =
     return lsimodel
 
 
-def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Session]:
-    def load_alias() -> {'str': 'str'}:
+def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
+    def load_alias() -> {str: str}:
         aliases = {}
         try:
             with open(ALIASPATH, 'r') as alias_file:
@@ -133,14 +158,18 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
 
     def read_dataset(period: str, subname: str):
         logging.info('reading dataset from json in following period: {}'.format(period))
-        sessions = []
+        sessions = {}
         for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subname):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.debug('current read json file: {}'.format(file_dir.split('logs/')[1]))
                 with open(file_dir, encoding='utf-8') as raw_log_file:
                     data = json.load(raw_log_file)
-                sessions.append(Session(data))
+                session = Session(data)
+                if session.uuid in sessions:
+                    sessions[session.uuid].merge(session)
+                else:
+                    sessions[session.uuid] = session
             log_file = open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
@@ -150,7 +179,7 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
         pool = []
         for period in PERIODS:
             for subname in SUBNAMES:
-                pool.append(threading.Thread(target=read_dataset, args=(period, subname, )))
+                pool.append(threading.Thread(target=read_dataset, args=(period, subname)))
         for thread in pool:
             thread.start()
         for thread in pool:
@@ -163,7 +192,7 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
         for subname in SUBNAMES:
             with open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'rb') as log_file:
                 sessions = pickle.load(log_file)
-            for session in sessions:
+            for session in sessions.values():
                 for activity in session.activities:
                     if activity.command is not None:
                         activity.command = activity.command.strip()
@@ -188,17 +217,17 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     return sessions
 
 
-def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, window: int = 10, test_size: float = 0.5, folds: int = 1):
+def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 10, test_size: float = 0.5, folds: int = 1):
     dataset = defaultdict(list)
     for session in sessions:
         if session.userid is not None:
-            for activity in session.activities:
+            for uuid, activity in sorted(session.activities.items(), key=lambda item: item[0]):
                 if activity.command.split()[0] in lsimodel.keys():
                     dataset[session.userid].append(activity.command.split()[0])
 
     for userid, commands in dataset.items():
         dataset[userid] = list(zip(*[iter(commands)] * window))
-    dataset = sorted(dataset.items(), key=lambda item: -item[1])
+    dataset = sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True)
 
 
 
