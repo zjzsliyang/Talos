@@ -7,9 +7,9 @@ import pickle
 import logging
 import threading
 import subprocess
-from collections import defaultdict
 from stop_words import get_stop_words
 from sklearn import svm, model_selection
+from collections import defaultdict, OrderedDict
 from gensim import models, similarities, corpora
 
 
@@ -227,9 +227,7 @@ def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 
 
     for userid, commands in dataset.items():
         dataset[userid] = list(zip(*[iter(commands)] * window))
-    dataset = sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True)
-
-
+    dataset = OrderedDict(sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True))
 
     for times in range(0, folds):
         for userid in dataset.keys():
