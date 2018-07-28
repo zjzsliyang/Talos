@@ -12,7 +12,6 @@ from sklearn import svm, model_selection
 from collections import defaultdict, OrderedDict
 from gensim import models, similarities, corpora
 
-
 MANNAME = 'manual'
 LSIMODEL = 'lsi.model'
 ALIASPATH = 'alias.txt'
@@ -217,7 +216,8 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     return sessions
 
 
-def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 10, test_size: float = 0.5, folds: int = 1):
+def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 10, test_size: float = 0.5,
+                   folds: int = 1, topno: int = 10):
     dataset = defaultdict(list)
     for session in sessions:
         if session.userid is not None:
@@ -227,18 +227,25 @@ def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 
 
     for userid, commands in dataset.items():
         dataset[userid] = list(zip(*[iter(commands)] * window))
-    dataset = OrderedDict(sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True))
+    dataset = OrderedDict(sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True)[:topno])
+
+    for userid, commands in dataset.items():
+        for i, command in enumerate(commands):
+            dataset[userid][i] = lsimodel[command]
 
     for times in range(0, folds):
         for userid in dataset.keys():
             logging.debug('userid {0} has {1} commands'.format(userid, len(dataset[userid])))
-            training_dataset, testing_dataset = model_selection.train_test_split(dataset[userid], test_size=test_size)
+            train_dataset, test_dataset = model_selection.train_test_split(dataset[userid], test_size=test_size)
 
-
-
-
-
-    svm.OneClassSVM()
+            clf = svm.OneClassSVM(nu=0.05, kernel="rbf")
+            clf.fit(train_dataset)
+            train_pred = clf.predict(train_dataset)
+            test_pred = clf.predict(test_dataset)
+            n_error_train = train_pred[train_pred == -1].size
+            n_error_test = test_pred[test_pred == 1].size
+            logging.info('train error no is {}'.format(n_error_train))
+            logging.info('test error no is {}'.format(n_error_test))
 
 
 def main():
