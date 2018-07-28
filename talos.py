@@ -7,9 +7,9 @@ import pickle
 import logging
 import threading
 import subprocess
-from sklearn import svm
 from collections import defaultdict
 from stop_words import get_stop_words
+from sklearn import svm, model_selection
 from gensim import models, similarities, corpora
 
 
@@ -18,6 +18,7 @@ LSIMODEL = 'lsi.model'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
+SUBNAMES = ['0, ''1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807']
 
@@ -130,17 +131,17 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
             print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
         return aliases
 
-    def read_dataset(period: str):
+    def read_dataset(period: str, subname: str):
         logging.info('reading dataset from json in following period: {}'.format(period))
         sessions = []
-        for root, dirs, files in os.walk(LOGPATH + '/' + period):
+        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subname):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.debug('current read json file: {}'.format(file_dir.split('logs/')[1]))
                 with open(file_dir, encoding='utf-8') as raw_log_file:
                     data = json.load(raw_log_file)
                 sessions.append(Session(data))
-            log_file = open(LOGNAME + '_' + period + '.pickle', 'wb')
+            log_file = open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
         logging.info('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
@@ -148,7 +149,8 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     if multithread:
         pool = []
         for period in PERIODS:
-            pool.append(threading.Thread(target=read_dataset, args=(period,)))
+            for subname in SUBNAMES:
+                pool.append(threading.Thread(target=read_dataset, args=(period, subname, )))
         for thread in pool:
             thread.start()
         for thread in pool:
@@ -158,21 +160,22 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     commands = defaultdict(int)
     for period in PERIODS:
         logging.info('load dataset from pickle in following period: {}'.format(period))
-        with open(LOGNAME + '_' + period + '.pickle', 'rb') as log_file:
-            sessions = pickle.load(log_file)
-        for session in sessions:
-            for activity in session.activities:
-                if activity.command is not None:
-                    activity.command = activity.command.strip()
-                    if len(activity.command.split()):
-                        for alias in aliases.keys():
-                            if activity.command.startswith(alias + ' '):
-                                activity.command = activity.command.replace(alias, aliases[alias], 1)
-                        commands[activity.command.split()[0]] += 1
+        for subname in SUBNAMES:
+            with open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'rb') as log_file:
+                sessions = pickle.load(log_file)
+            for session in sessions:
+                for activity in session.activities:
+                    if activity.command is not None:
+                        activity.command = activity.command.strip()
+                        if len(activity.command.split()):
+                            for alias in aliases.keys():
+                                if activity.command.startswith(alias + ' '):
+                                    activity.command = activity.command.replace(alias, aliases[alias], 1)
+                            commands[activity.command.split()[0]] += 1
+                        else:
+                            session.activities.remove(activity)
                     else:
                         session.activities.remove(activity)
-                else:
-                    session.activities.remove(activity)
 
     logging.info(
         'current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
@@ -185,7 +188,7 @@ def load_dataset(manpages: {'str': 'str'}, multithread: bool = False) -> [Sessio
     return sessions
 
 
-def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, window: int = 10, training: float = 0.5, folds: int = 1):
+def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, window: int = 10, test_size: float = 0.5, folds: int = 1):
     dataset = defaultdict(list)
     for session in sessions:
         if session.userid is not None:
@@ -195,8 +198,19 @@ def outlier_detect(sessions: [Session], lsimodel: {'str': [float]}, window: int 
 
     for userid, commands in dataset.items():
         dataset[userid] = list(zip(*[iter(commands)] * window))
+    dataset = sorted(dataset.items(), key=lambda item: -item[1])
 
-    
+
+
+    for times in range(0, folds):
+        for userid in dataset.keys():
+            logging.debug('userid {0} has {1} commands'.format(userid, len(dataset[userid])))
+            training_dataset, testing_dataset = model_selection.train_test_split(dataset[userid], test_size=test_size)
+
+
+
+
+
     svm.OneClassSVM()
 
 
