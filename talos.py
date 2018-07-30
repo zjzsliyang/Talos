@@ -176,7 +176,7 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     if multithread:
         pool = []
         for period in PERIODS:
-            pool.append(threading.Thread(target=read_dataset, args=(period)))
+            pool.append(threading.Thread(target=read_dataset, args=(period, )))
         for thread in pool:
             thread.start()
         for thread in pool:
