@@ -7,6 +7,7 @@ import pickle
 import logging
 import threading
 import subprocess
+from statistics import mean
 from stop_words import get_stop_words
 from sklearn import svm, model_selection
 from collections import defaultdict, OrderedDict
@@ -49,6 +50,10 @@ class Session:
 
     def merge(self, session: dict):
         another = Session(session)
+        self.update(another)
+        return self
+
+    def update(self, another):
         self.activities.update(another.activities)
         if self.starttime is None:
             self.starttime = another.starttime
@@ -176,7 +181,7 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     if multithread:
         pool = []
         for period in PERIODS:
-            pool.append(threading.Thread(target=read_dataset, args=(period, )))
+            pool.append(threading.Thread(target=read_dataset, args=(period,)))
         for thread in pool:
             thread.start()
         for thread in pool:
@@ -184,12 +189,13 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
 
     aliases = load_alias()
     commands = defaultdict(int)
+    all_sessions = {}
     for period in PERIODS:
         logging.info('load dataset from pickle in following period: {}'.format(period))
         with open(LOGNAME + '_' + period + '.pickle', 'rb') as log_file:
             sessions = pickle.load(log_file)
         for session in sessions.values():
-            for activity in session.activities:
+            for activity in list(session.activities.values()):
                 if activity.command is not None:
                     activity.command = activity.command.strip()
                     if len(activity.command.split()):
@@ -198,9 +204,13 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
                                 activity.command = activity.command.replace(alias, aliases[alias], 1)
                         commands[activity.command.split()[0]] += 1
                     else:
-                        session.activities.remove(activity)
+                        session.activities.pop(activity.seqno)
                 else:
-                    session.activities.remove(activity)
+                    session.activities.pop(activity.seqno)
+            if session.uuid in all_sessions:
+                all_sessions[session.uuid].update(session)
+            else:
+                all_sessions[session.uuid] = session
 
     logging.info(
         'current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
@@ -210,25 +220,28 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     logging.info(
         'already known {0} with {1} unique commands.'.format(sum(known_commands.values()), len(known_commands.keys())))
 
-    return sessions
+    return all_sessions
 
 
-def outlier_detect(sessions: [Session], lsimodel: {str: [float]}, window: int = 10, test_size: float = 0.5,
+def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, window: int = 10, test_size: float = 0.5,
                    folds: int = 1, topno: int = 10):
     dataset = defaultdict(list)
-    for session in sessions:
+    for session in sessions.values():
         if session.userid is not None:
-            for uuid, activity in sorted(session.activities.items(), key=lambda item: item[0]):
+            for seqno, activity in sorted(session.activities.items(), key=lambda item: item[0]):
                 if activity.command.split()[0] in lsimodel.keys():
                     dataset[session.userid].append(activity.command.split()[0])
 
     for userid, commands in dataset.items():
-        dataset[userid] = list(zip(*[iter(commands)] * window))
+        dataset[userid] = list(map(list, zip(*[iter(commands)] * window)))
     dataset = OrderedDict(sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True)[:topno])
 
-    for userid, commands in dataset.items():
-        for i, command in enumerate(commands):
-            dataset[userid][i] = lsimodel[command]
+    for userid, commands_windows in dataset.items():
+        for i, commands_window in enumerate(commands_windows):
+            data = []
+            for command in commands_window:
+                data.append([item[1] for item in lsimodel[command]])
+            dataset[userid][i] = list(map(mean, zip(*data)))
 
     for times in range(0, folds):
         for userid in dataset.keys():
