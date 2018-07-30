@@ -17,7 +17,6 @@ LSIMODEL = 'lsi.model'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
-SUBNAMES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807']
 
@@ -155,10 +154,10 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
             print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
         return aliases
 
-    def read_dataset(period: str, subname: str):
-        logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subname))
+    def read_dataset(period: str):
+        logging.debug('reading dataset from json in following period: {}'.format(period))
         sessions = {}
-        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subname):
+        for root, dirs, files in os.walk(LOGPATH + '/' + period):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
@@ -169,7 +168,7 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
                     sessions[session.uuid].merge(session)
                 else:
                     sessions[session.uuid] = session
-            log_file = open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'wb')
+            log_file = open(LOGNAME + '_' + period + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
         logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
@@ -177,8 +176,7 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     if multithread:
         pool = []
         for period in PERIODS:
-            for subname in SUBNAMES:
-                pool.append(threading.Thread(target=read_dataset, args=(period, subname)))
+            pool.append(threading.Thread(target=read_dataset, args=(period)))
         for thread in pool:
             thread.start()
         for thread in pool:
@@ -188,22 +186,21 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     commands = defaultdict(int)
     for period in PERIODS:
         logging.info('load dataset from pickle in following period: {}'.format(period))
-        for subname in SUBNAMES:
-            with open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'rb') as log_file:
-                sessions = pickle.load(log_file)
-            for session in sessions.values():
-                for activity in session.activities:
-                    if activity.command is not None:
-                        activity.command = activity.command.strip()
-                        if len(activity.command.split()):
-                            for alias in aliases.keys():
-                                if activity.command.startswith(alias + ' '):
-                                    activity.command = activity.command.replace(alias, aliases[alias], 1)
-                            commands[activity.command.split()[0]] += 1
-                        else:
-                            session.activities.remove(activity)
+        with open(LOGNAME + '_' + period + '.pickle', 'rb') as log_file:
+            sessions = pickle.load(log_file)
+        for session in sessions.values():
+            for activity in session.activities:
+                if activity.command is not None:
+                    activity.command = activity.command.strip()
+                    if len(activity.command.split()):
+                        for alias in aliases.keys():
+                            if activity.command.startswith(alias + ' '):
+                                activity.command = activity.command.replace(alias, aliases[alias], 1)
+                        commands[activity.command.split()[0]] += 1
                     else:
                         session.activities.remove(activity)
+                else:
+                    session.activities.remove(activity)
 
     logging.info(
         'current load {0} with {1} unique commands from pickle'.format(sum(commands.values()), len(commands.keys())))
