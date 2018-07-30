@@ -17,7 +17,7 @@ LSIMODEL = 'lsi.model'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
-SUBNAMES = ['0, ''1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
+SUBNAMES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807']
 
@@ -156,12 +156,12 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
         return aliases
 
     def read_dataset(period: str, subname: str):
-        logging.info('reading dataset from json in following period: {}'.format(period))
+        logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subname))
         sessions = {}
         for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subname):
             for name in files:
                 file_dir = os.path.join(root, name)
-                logging.debug('current read json file: {}'.format(file_dir.split('logs/')[1]))
+                logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
                 with open(file_dir, encoding='utf-8') as raw_log_file:
                     data = json.load(raw_log_file)
                 session = Session(data)
@@ -172,7 +172,7 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
             log_file = open(LOGNAME + '_' + period + '_' + subname + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
-        logging.info('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
+        logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
 
     if multithread:
         pool = []
@@ -253,7 +253,7 @@ def main():
 
     manpages = load_shell_commands(dumped=True)
     lsimodel = shell_commands_embedding(manpages, similar_commands=['ls', 'rm'])
-    outlier_detect(load_dataset(manpages, multithread=False), lsimodel)
+    outlier_detect(load_dataset(manpages, multithread=True), lsimodel)
 
 
 if __name__ == '__main__':
