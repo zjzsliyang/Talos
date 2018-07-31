@@ -14,7 +14,7 @@ from collections import defaultdict, OrderedDict
 from gensim import models, similarities, corpora
 
 MANNAME = 'manual'
-LSIMODEL = 'lsi.model'
+LSIMODEL = 'lsimodel'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
@@ -112,7 +112,11 @@ def load_shell_commands(dumped: bool = True) -> {str: str}:
     return manpages
 
 
-def shell_commands_embedding(manpages: {str: str}, similar_commands: [str] = []) -> {str: [float]}:
+def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_commands: [str] = []) -> {str: [float]}:
+    if dumped:
+        with open(LSIMODEL + '.pickle', 'rb') as lsi_file:
+            return pickle.load(lsi_file)
+
     stop_words = get_stop_words('en')
     stemmer = nltk.stem.SnowballStemmer('english')
     commands = []
@@ -144,6 +148,10 @@ def shell_commands_embedding(manpages: {str: str}, similar_commands: [str] = [])
 
     for similar_command in similar_commands:
         find_similar_commands(similar_command)
+
+    lsi_file = open(LSIMODEL + '.pickle', 'wb')
+    pickle.dump(lsimodel, lsi_file)
+    lsi_file.close()
 
     return lsimodel
 
@@ -253,7 +261,7 @@ def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, wi
             train_pred = clf.predict(train_dataset)
             test_pred = clf.predict(test_dataset)
             n_error_train = train_pred[train_pred == -1].size
-            n_error_test = test_pred[test_pred == 1].size
+            n_error_test = test_pred[test_pred == -1].size
             logging.info('train error no is {}'.format(n_error_train))
             logging.info('test error no is {}'.format(n_error_test))
 
