@@ -283,7 +283,7 @@ def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, wi
                 'user {0} malicious no of testset is {1} with all {2} in fold {3}'.format(userid, n_malicious_test,
                                                                                           len(test_pred), times))
 
-            if (n_malicious_train / len(train_pred) < 0.1):
+            if (n_malicious_train / len(train_pred)) < 0.1:
                 train_commandset = numpy.array(train_commandset)
                 test_commandset = numpy.array(test_commandset)
                 malicious_train = set(itertools.chain(*train_commandset[train_pred == -1]))
