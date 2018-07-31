@@ -1,10 +1,13 @@
 import os
 import sys
+import copy
 import json
 import nltk
+import numpy
 import string
 import pickle
 import logging
+import itertools
 import threading
 import subprocess
 from statistics import mean
@@ -14,6 +17,7 @@ from collections import defaultdict, OrderedDict
 from gensim import models, similarities, corpora
 
 MANNAME = 'manual'
+SESSIONS = 'sessions'
 LSIMODEL = 'lsimodel'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
@@ -156,7 +160,11 @@ def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_
     return lsimodel
 
 
-def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
+def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False) -> [Session]:
+    if dumped:
+        with open(SESSIONS + '.pickle', 'rb') as sessions_file:
+            return pickle.load(sessions_file)
+
     def load_alias() -> {str: str}:
         aliases = {}
         try:
@@ -228,6 +236,10 @@ def load_dataset(manpages: {str: str}, multithread: bool = False) -> [Session]:
     logging.info(
         'already known {0} with {1} unique commands.'.format(sum(known_commands.values()), len(known_commands.keys())))
 
+    sessions_file = open(SESSIONS + '.pickle', 'wb')
+    pickle.dump(all_sessions, sessions_file)
+    sessions_file.close()
+
     return all_sessions
 
 
@@ -243,6 +255,7 @@ def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, wi
     for userid, commands in dataset.items():
         dataset[userid] = list(map(list, zip(*[iter(commands)] * window)))
     dataset = OrderedDict(sorted(dataset.items(), key=lambda item: len(item[1]), reverse=True)[:topno])
+    commandset = copy.deepcopy(dataset)
 
     for userid, commands_windows in dataset.items():
         for i, commands_window in enumerate(commands_windows):
@@ -251,27 +264,41 @@ def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, wi
                 data.append([item[1] for item in lsimodel[command]])
             dataset[userid][i] = list(map(mean, zip(*data)))
 
-    for times in range(0, folds):
-        for userid in dataset.keys():
+    for userid in dataset.keys():
+        for times in range(0, folds):
             logging.debug('userid {0} has {1} commands'.format(userid, len(dataset[userid])))
-            train_dataset, test_dataset = model_selection.train_test_split(dataset[userid], test_size=test_size)
+            train_dataset, test_dataset, train_commandset, test_commandset = model_selection.train_test_split(
+                dataset[userid], commandset[userid], test_size=test_size)
 
-            clf = svm.OneClassSVM(nu=0.05, kernel="rbf")
+            clf = svm.OneClassSVM(nu=0.05, kernel="poly")
             clf.fit(train_dataset)
             train_pred = clf.predict(train_dataset)
             test_pred = clf.predict(test_dataset)
-            n_error_train = train_pred[train_pred == -1].size
-            n_error_test = test_pred[test_pred == -1].size
-            logging.info('train error no is {}'.format(n_error_train))
-            logging.info('test error no is {}'.format(n_error_test))
+            n_malicious_train = train_pred[train_pred == -1].size
+            n_malicious_test = test_pred[test_pred == -1].size
+            logging.info(
+                'user {0} malicious no of trainset is {1} with all {2} in fold {3}'.format(userid, n_malicious_train,
+                                                                                           len(train_pred), times))
+            logging.info(
+                'user {0} malicious no of testset is {1} with all {2} in fold {3}'.format(userid, n_malicious_test,
+                                                                                          len(test_pred), times))
+
+            if (n_malicious_train / len(train_pred) < 0.1):
+                train_commandset = numpy.array(train_commandset)
+                test_commandset = numpy.array(test_commandset)
+                malicious_train = set(itertools.chain(*train_commandset[train_pred == -1]))
+                logging.info('user {0} malicious command {1} in trainset'.format(userid, malicious_train))
+                malicious_test = set(itertools.chain(*test_commandset[test_pred == -1]))
+                logging.info('user {0} malicious command {1} in testset'.format(userid, malicious_test))
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    manpages = load_shell_commands(dumped=True)
-    lsimodel = shell_commands_embedding(manpages, similar_commands=['ls', 'rm'])
-    outlier_detect(load_dataset(manpages, multithread=True), lsimodel)
+    manpages = load_shell_commands()
+    lsimodel = shell_commands_embedding(manpages)
+    sessions = load_dataset(manpages)
+    outlier_detect(sessions, lsimodel, window=1)
 
 
 if __name__ == '__main__':
