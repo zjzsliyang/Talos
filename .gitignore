@@ -2,3 +2,4 @@
 .idea
 *.pickle
 log_dataset.txt
+__pycache__

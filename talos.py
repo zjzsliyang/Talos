@@ -2,6 +2,7 @@ import os
 import sys
 import copy
 import json
+import time
 import nltk
 import numpy
 import string
@@ -10,7 +11,9 @@ import logging
 import itertools
 import threading
 import subprocess
+import collections
 from statistics import mean
+from datetime import datetime
 from stop_words import get_stop_words
 from sklearn import svm, model_selection
 from collections import defaultdict, OrderedDict
@@ -160,7 +163,7 @@ def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_
     return lsimodel
 
 
-def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False) -> [Session]:
+def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 10) -> [Session]:
     if dumped:
         with open(SESSIONS + '.pickle', 'rb') as sessions_file:
             return pickle.load(sessions_file)
@@ -205,7 +208,12 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
 
     aliases = load_alias()
     commands = defaultdict(int)
+    days = defaultdict(int)
+    weekday_time = defaultdict(int)
+    month_time = defaultdict(int)
+
     all_sessions = {}
+
     for period in PERIODS:
         logging.info('load dataset from pickle in following period: {}'.format(period))
         with open(LOGNAME + '_' + period + '.pickle', 'rb') as log_file:
@@ -219,6 +227,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                             if activity.command.startswith(alias + ' '):
                                 activity.command = activity.command.replace(alias, aliases[alias], 1)
                         commands[activity.command.split()[0]] += 1
+                        activity_time = datetime.fromtimestamp(time.mktime(time.localtime(int(activity.datetime))))
+                        days[activity_time.strftime('%Y-%m-%d')] += 1
+                        weekday_time[activity_time.weekday()] += 1
+                        month_time[activity_time.month] += 1
                     else:
                         session.activities.pop(activity.seqno)
                 else:
@@ -240,7 +252,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
     pickle.dump(all_sessions, sessions_file)
     sessions_file.close()
 
-    return all_sessions
+    basic_info = (sum(commands.values()), sum(known_commands.values()), len(known_commands.keys()), len(days.keys()))
+    summary_info = (weekday_time, month_time, collections.Counter(known_commands).most_common(summary_top))
+
+    return all_sessions, basic_info, summary_info
 
 
 def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, window: int = 10, test_size: float = 0.5,
