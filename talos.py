@@ -163,7 +163,7 @@ def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_
     return lsimodel
 
 
-def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 10) -> [Session]:
+def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 8) -> [Session]:
     if dumped:
         with open(SESSIONS + '.pickle', 'rb') as sessions_file:
             return pickle.load(sessions_file)
@@ -211,6 +211,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
     days = defaultdict(int)
     weekday_time = defaultdict(int)
     month_time = defaultdict(int)
+    latest_date = datetime.now()
 
     all_sessions = {}
 
@@ -228,6 +229,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                                 activity.command = activity.command.replace(alias, aliases[alias], 1)
                         commands[activity.command.split()[0]] += 1
                         activity_time = datetime.fromtimestamp(time.mktime(time.localtime(int(activity.datetime))))
+                        latest_date = min(latest_date, activity_time)
                         days[activity_time.strftime('%Y-%m-%d')] += 1
                         weekday_time[activity_time.weekday()] += 1
                         month_time[activity_time.month] += 1
@@ -253,9 +255,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
     sessions_file.close()
 
     basic_info = (sum(commands.values()), sum(known_commands.values()), len(known_commands.keys()), len(days.keys()))
-    summary_info = (weekday_time, month_time, collections.Counter(known_commands).most_common(summary_top))
+    summary_info = (weekday_time, month_time, dict(collections.Counter(known_commands).most_common(summary_top)))
+    other_info = (latest_date.strftime('%b %d, %Y'), )
 
-    return all_sessions, basic_info, summary_info
+    return all_sessions, basic_info, summary_info, other_info
 
 
 def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, window: int = 10, test_size: float = 0.5,
