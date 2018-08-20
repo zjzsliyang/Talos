@@ -178,10 +178,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
             print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
         return aliases
 
-    def read_dataset(period: str):
+    def read_dataset(period: str, subperiod: str):
         logging.debug('reading dataset from json in following period: {}'.format(period))
         sessions = {}
-        for root, dirs, files in os.walk(LOGPATH + '/' + period):
+        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
@@ -192,7 +192,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                     sessions[session.uuid].merge(session)
                 else:
                     sessions[session.uuid] = session
-            log_file = open(LOGNAME + '_' + period + '.pickle', 'wb')
+            log_file = open(LOGNAME + '_' + period + '_' + subperiod + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
         logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
@@ -200,7 +200,9 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
     if multithread:
         pool = []
         for period in PERIODS:
-            pool.append(threading.Thread(target=read_dataset, args=(period,)))
+            for subperiod in os.listdir(LOGPATH + '/' + period):
+                if os.path.isdir(subperiod):
+                    pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, )))
         for thread in pool:
             thread.start()
         for thread in pool:
