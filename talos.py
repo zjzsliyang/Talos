@@ -183,13 +183,16 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
-                with open(file_dir, encoding='utf-8') as raw_log_file:
-                    data = json.load(raw_log_file)
-                session = Session(data)
-                if session.uuid in sessions:
-                    sessions[session.uuid].update(session)
-                else:
-                    sessions[session.uuid] = session
+                try:
+                    with open(file_dir, encoding='utf-8') as raw_log_file:
+                        data = json.load(raw_log_file)
+                    session = Session(data)
+                    if session.uuid in sessions:
+                        sessions[session.uuid].update(session)
+                    else:
+                        sessions[session.uuid] = session
+                except:
+                    logging.warning('can not open {}'.format(file_dir))
             log_file = open(RAWPATH + '/' + LOGNAME + '_' + period + '_' + subperiod + '_' + index + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
