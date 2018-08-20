@@ -199,7 +199,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
         pool = []
         for period in PERIODS:
             for subperiod in os.listdir(LOGPATH + '/' + period):
-                if subperiod == '201803270801':
+                if subperiod == '201803270801' or subperiod == '201804230547':
                     continue
                 for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
                     pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, )))
