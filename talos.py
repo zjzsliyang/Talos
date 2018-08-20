@@ -24,17 +24,18 @@ SESSIONS = 'sessions'
 LSIMODEL = 'lsimodel'
 ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
+RAWPATH = 'raw_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
-           '201806', '201807']
+           '201806', '201807', '201808']
 
 
 class Activity:
     def __init__(self, activity: dict):
         self.command = activity['command']
-        self.datetime = activity['datetime']
-        self.id = activity['id']
         self.seqno = activity['sequence_number']
+        self.datetime = activity['datetime']
+        self.id =activity.get('id')
 
 
 class Session:
@@ -43,22 +44,17 @@ class Session:
         if 'activities' in session:
             for activity in session['activities']:
                 self.activities[activity['sequence_number']] = Activity(activity)
-        self.starttime = session['starttime']
-        self.endtime = session['endtime']
-        self.hostname = session['hostname']
-        self.rule = session['rule']
-        self.runas = session['runas']
-        self.subject = session['subject']
-        self.tags = session['tags']
-        self.ticketas = session['ticketas']
-        self.tooltype = session['toolType']
-        self.userid = session['userid']
         self.uuid = session['uuid']
-
-    def merge(self, session: dict):
-        another = Session(session)
-        self.update(another)
-        return self
+        self.starttime = session.get('starttime')
+        self.endtime = session.get('endtime')
+        self.hostname = session.get('hostname')
+        self.rule = session.get('rule')
+        self.runas = session.get('runas')
+        self.subject = session.get('subject')
+        self.tags = session.get('tags', [])
+        self.ticketas = session.get('ticketas')
+        self.tooltype = session.get('toolType')
+        self.userid = session.get('userid')
 
     def update(self, another):
         self.activities.update(another.activities)
@@ -163,7 +159,7 @@ def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_
     return lsimodel
 
 
-def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 8) -> [Session]:
+def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 8):
     if dumped:
         with open(SESSIONS + '.pickle', 'rb') as sessions_file:
             return pickle.load(sessions_file)
@@ -179,6 +175,8 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
         return aliases
 
     def read_dataset(period: str, subperiod: str, index: str):
+        if not os.path.exists(RAWPATH):
+            os.mkdir(RAWPATH)
         logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subperiod + '_' + index))
         sessions = {}
         for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
@@ -189,10 +187,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                     data = json.load(raw_log_file)
                 session = Session(data)
                 if session.uuid in sessions:
-                    sessions[session.uuid].merge(session)
+                    sessions[session.uuid].update(session)
                 else:
                     sessions[session.uuid] = session
-            log_file = open(LOGNAME + '_' + period + '_' + subperiod + '_' + index + '.pickle', 'wb')
+            log_file = open(RAWPATH + '/' + LOGNAME + '_' + period + '_' + subperiod + '_' + index + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
         logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
@@ -201,6 +199,8 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
         pool = []
         for period in PERIODS:
             for subperiod in os.listdir(LOGPATH + '/' + period):
+                if subperiod == '201803270801':
+                    continue
                 for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
                     pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, )))
         for thread in pool:
@@ -217,9 +217,9 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
 
     all_sessions = {}
 
-    for period in PERIODS:
-        logging.info('load dataset from pickle in following period: {}'.format(period))
-        with open(LOGNAME + '_' + period + '.pickle', 'rb') as log_file:
+    for raw_file in os.listdir(RAWPATH):
+        logging.info('load dataset from pickle in following file: {}'.format(raw_file))
+        with open(RAWPATH + '/' + raw_file, 'rb') as log_file:
             sessions = pickle.load(log_file)
         for session in sessions.values():
             for activity in list(session.activities.values()):
@@ -313,12 +313,12 @@ def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, wi
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     manpages = load_shell_commands()
-    lsimodel = shell_commands_embedding(manpages)
-    sessions = load_dataset(manpages)
-    outlier_detect(sessions, lsimodel, window=1)
+    # lsimodel = shell_commands_embedding(manpages)
+    sessions, basic_info, summary_info, other_info = load_dataset(manpages, dumped=False, multithread=True)
+    # outlier_detect(sessions, lsimodel, window=1)
 
 
 if __name__ == '__main__':
