@@ -174,10 +174,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
             print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
         return aliases
 
-    def read_dataset(period: str, subperiod: str, index: str):
+    def read_dataset(period: str, subperiod: str, index: str, subindex: str):
         logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subperiod + '_' + index))
         sessions = {}
-        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
+        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index + '/' + subindex):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
@@ -205,7 +205,8 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                 if subperiod == '201803270801' or subperiod == '201804230547':
                     continue
                 for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
-                    pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, )))
+                    for subindex in os.listdir(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
+                        pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex, )))
         for thread in pool:
             thread.start()
         for thread in pool:
