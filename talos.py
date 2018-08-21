@@ -26,6 +26,7 @@ ALIASPATH = 'alias.txt'
 LOGNAME = 'log_dataset'
 RAWPATH = 'raw_dataset'
 LOGPATH = '/v/global/appl/appmw/tam-ar-etl/data/shellmask_dev/shelllogreview/logs'
+INDEXS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
 PERIODS = ['201707', '201708', '201709', '201710', '201711', '201712', '201801', '201802', '201803', '201804', '201805',
            '201806', '201807', '201808']
 
@@ -204,9 +205,15 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
             for subperiod in os.listdir(LOGPATH + '/' + period):
                 if subperiod == '201803270801' or subperiod == '201804230547':
                     continue
-                for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
-                    for subindex in os.listdir(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
-                        pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex, )))
+                for index in INDEXS:
+                    if os.path.exists(LOGPATH + '/' + period + '/' + index):
+                        for subindex in INDEXS:
+                            if os.path.exists(LOGPATH + '/' + period +'/' + index + '/' + subindex):
+                                pool.append(
+                                    threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex,)))
+                # for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
+                #     for subindex in os.listdir(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
+                #         pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex, )))
         for thread in pool:
             thread.start()
         for thread in pool:
