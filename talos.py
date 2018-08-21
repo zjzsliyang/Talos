@@ -175,8 +175,6 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
         return aliases
 
     def read_dataset(period: str, subperiod: str, index: str):
-        if not os.path.exists(RAWPATH):
-            os.mkdir(RAWPATH)
         logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subperiod + '_' + index))
         sessions = {}
         for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
@@ -199,6 +197,8 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
         logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
 
     if multithread:
+        if not os.path.exists(RAWPATH):
+            os.mkdir(RAWPATH)
         pool = []
         for period in PERIODS:
             for subperiod in os.listdir(LOGPATH + '/' + period):
