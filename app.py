@@ -1,8 +1,10 @@
-import collections
 import json
 import talos
+import logging
+import collections
 from flask_cors import CORS
 from datetime import datetime
+from talos import Session, Activity
 from flask import Flask, Response, request
 
 app = Flask(__name__)
@@ -58,6 +60,7 @@ def init():
     info.update(dict(zip(level_factors, level_info)))
     for basic in basic_factors:
         info[basic] = format(info[basic], ',d')
+    logging.info('begin service')
 
 
 @app.route('/dashboard')
@@ -75,4 +78,4 @@ def person():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='127.0.0.1', port=5000)

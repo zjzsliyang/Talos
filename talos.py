@@ -19,6 +19,7 @@ from sklearn import svm, model_selection
 from collections import defaultdict, OrderedDict
 from gensim import models, similarities, corpora
 
+INFO = 'info'
 MANNAME = 'manual'
 SESSIONS = 'sessions'
 LSIMODEL = 'lsimodel'
@@ -163,7 +164,9 @@ def shell_commands_embedding(manpages: {str: str}, dumped: bool = True, similar_
 def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = False, summary_top: int = 8):
     if dumped:
         with open(SESSIONS + '.pickle', 'rb') as sessions_file:
-            return pickle.load(sessions_file)
+            with open(INFO + '.pickle', 'rb') as info_file:
+                (basic_info, summary_info, other_info, level_info) = pickle.load(info_file)
+                return pickle.load(sessions_file), basic_info, summary_info, other_info, level_info
 
     def load_alias() -> {str: str}:
         aliases = {}
@@ -265,7 +268,16 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
     summary_info = (weekday_time, month_time, dict(collections.Counter(known_commands).most_common(summary_top)))
     other_info = (latest_date.strftime('%b %d, %Y'), )
 
-    return all_sessions, basic_info, summary_info, other_info
+    dangerous = []
+    middle = []
+    slight = []
+    level_info = (dangerous, middle, slight)
+
+    info_file = open(INFO + '.pickle', 'wb')
+    pickle.dump((basic_info, summary_info, other_info, level_info), info_file)
+    info_file.close()
+
+    return all_sessions, basic_info, summary_info, other_info, level_info
 
 
 def outlier_detect(sessions: {str: Session}, lsimodel: {str: [(int, float)]}, window: int = 10, test_size: float = 0.5,
@@ -321,9 +333,9 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
 
     manpages = load_shell_commands()
-    # lsimodel = shell_commands_embedding(manpages)
-    sessions, basic_info, summary_info, other_info = load_dataset(manpages, dumped=False, multithread=True)
-    # outlier_detect(sessions, lsimodel, window=1)
+    lsimodel = shell_commands_embedding(manpages)
+    sessions, basic_info, summary_info, other_info, level_info = load_dataset(manpages, dumped=False)
+    outlier_detect(sessions, lsimodel, window=1)
 
 
 if __name__ == '__main__':
