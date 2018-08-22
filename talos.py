@@ -175,10 +175,10 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
             print('alias file not found, please run the command to generate: \n\talias > ' + ALIASPATH)
         return aliases
 
-    def read_dataset(period: str, subperiod: str, index: str, subindex: str):
-        logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subperiod + '_' + index + '_' + index + subindex))
+    def read_dataset(period: str, subperiod: str, index: str):
+        logging.debug('reading dataset from json in following period: {}'.format(period + '_' + subperiod + '_' + index))
         sessions = {}
-        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index + '/' + index + subindex):
+        for root, dirs, files in os.walk(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
             for name in files:
                 file_dir = os.path.join(root, name)
                 logging.info('current read json file: {}'.format(file_dir.split('logs/')[1]))
@@ -192,7 +192,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                         sessions[session.uuid] = session
                 except:
                     logging.warning('can not open {}'.format(file_dir))
-            log_file = open(RAWPATH + '/' + LOGNAME + '_' + period + '_' + subperiod + '_' + index + '_' + index + subindex + '.pickle', 'wb')
+            log_file = open(RAWPATH + '/' + LOGNAME + '_' + period + '_' + subperiod + '_' + index + '.pickle', 'wb')
             pickle.dump(sessions, log_file)
             log_file.close()
         logging.debug('the size of log is {} MB'.format(sys.getsizeof(sessions) / 1000 / 1000))
@@ -207,13 +207,7 @@ def load_dataset(manpages: {str: str}, dumped: bool = True, multithread: bool = 
                     continue
                 for index in INDEXS:
                     if os.path.exists(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
-                        for subindex in INDEXS:
-                            if os.path.exists(LOGPATH + '/' + period +'/' + subperiod + '/' + index + '/' + index + subindex):
-                                pool.append(
-                                    threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex,)))
-                # for index in os.listdir(LOGPATH + '/' + period + '/' + subperiod):
-                #     for subindex in os.listdir(LOGPATH + '/' + period + '/' + subperiod + '/' + index):
-                #         pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index, subindex, )))
+                        pool.append(threading.Thread(target=read_dataset, args=(period, subperiod, index,)))
         for thread in pool:
             thread.start()
         for thread in pool:

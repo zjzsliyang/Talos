@@ -3,7 +3,7 @@ import json
 import talos
 from flask_cors import CORS
 from datetime import datetime
-from flask import Flask, Response
+from flask import Flask, Response, request
 
 app = Flask(__name__)
 app.debug = True
@@ -63,6 +63,15 @@ def init():
 @app.route('/dashboard')
 def dashboard():
     return Response(json.dumps(info), mimetype='application/json')
+
+
+@app.route('/user', methods=['POST'])
+def person():
+    content = request.get_json(silent=True)
+    userid = content.get('userid')
+
+    print(userid)
+    return str(userid)
 
 
 if __name__ == '__main__':
